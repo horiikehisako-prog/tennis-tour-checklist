@@ -1,25 +1,32 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>テニスツアー コーディネート チェックリスト</title>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>テニスツアー コーディネートチェックリスト</title>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-<script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone@7.23.2/babel.min.js"></script>
 <style>
-  html, body { margin: 0; padding: 0; }
-  * { box-sizing: border-box; }
+:root {
+  --navy:#0a1628; --red:#c8102e; --gold:#e8a020; --green:#059669;
+  --white:#fff; --offwhite:#f7f5f0; --gray:#6b7280; --light:#e5e7eb;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Hiragino Kaku Gothic ProN','Noto Sans JP',sans-serif;background:var(--offwhite);color:var(--navy);padding-bottom:60px;}
+button{font-family:inherit;cursor:pointer;}
+input,select,textarea{font-family:inherit;}
 </style>
 </head>
 <body>
 <div id="root"></div>
+
 <script type="text/babel">
 const { useState, useEffect, useRef } = React;
 
-// ---- Firebase setup ----
+// ── Firebase ──────────────────────────────────────────────
 const firebaseConfig = {
   apiKey: "AIzaSyAsr14o8ftu-9E-x1ZT89TUFThqK1FKUnc",
   authDomain: "concierge-shift-9f7ac.firebaseapp.com",
@@ -31,537 +38,560 @@ const firebaseConfig = {
 };
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
-const DB_PATH = "tennisTourChecklist";
+const CHECKLIST_PATH = "tennisTourChecklist2";
+const SECTIONS_PATH  = "tennisTourSections";
 
-// ---- Content (Japanese / English) ----
-const T = {
-  ja: {
-    appTitle: "ツアーコーディネート チェックリスト",
-    appSubtitle: "コロンバイン高校 × 福山・広島",
-    requiredProgress: "必須項目の記入進捗",
-    warningTitle: "⚠️ 思い込み防止メモ",
-    warningBody: "「当然こうだろう」は禁物！ 時間・人数・費用はすべて数字で双方確認を。\n🎤 例：カラオケ20名→部屋数は？何時間？（1時間は少ない！）",
-    required: "必須",
-    summaryTitle: "📋 全体ステータス確認",
-    statuses: ["未記入", "記入済み（要確認）", "双方合意✅"],
-    selectPlaceholder: "— 選択してください —",
-    saveButton: "💾 保存する",
-    saving: "保存中…",
-    saved: "保存しました✅",
-    saveError: "保存に失敗しました",
-    connOk: "🟢 接続OK：自動的に双方へ反映されます",
-    connChecking: "🟡 接続を確認中…",
-    connError: "🔴 接続できません（Firebaseの設定をご確認ください）",
-    lastUpdated: "最終更新",
-    never: "まだ保存されていません",
-    sections: [
-      {
-        id: "participants_us", title: "👥 参加者情報（アメリカ側）", color: "#1a3a6b",
-        fields: [
-          { id: "us_children_count", label: "子供（選手）の人数", type: "number", placeholder: "例: 12", critical: true },
-          { id: "us_tennis_style", label: "テニスの種別", type: "select", options: ["硬式", "軟式", "両方あり", "未確認"], critical: true },
-          { id: "us_children_age", label: "子供の年齢層／学年", type: "text", placeholder: "例: 14〜17歳（高校生）" },
-          { id: "us_adults_count", label: "同行大人の人数", type: "number", placeholder: "例: 5", critical: true },
-          { id: "us_adults_role", label: "大人の役割・属性", type: "textarea", placeholder: "例: 保護者2名、コーチ1名、ツアー社長1名、通訳1名", critical: true },
-          { id: "us_columbine_relation", label: "コロンバイン高校との関係（大人）", type: "textarea", placeholder: "例: 全員保護者／コーチは学校スタッフ／ツアー社長は外部" },
-          { id: "us_gender", label: "男女の内訳", type: "text", placeholder: "例: 男子8名・女子4名" },
-          { id: "us_skill_level", label: "選手のレベル感", type: "select", options: ["初級", "中級", "上級", "ミックス", "未確認"] },
-        ]
-      },
-      {
-        id: "participants_jp", title: "👥 参加者情報（日本側）", color: "#8b0000",
-        fields: [
-          { id: "jp_city", label: "参加する地域", type: "select", options: ["福山のみ", "広島のみ", "福山＋広島", "未定"], critical: true },
-          { id: "jp_children_count", label: "子供（選手）の人数", type: "number", placeholder: "例: 12", critical: true },
-          { id: "jp_tennis_style", label: "テニスの種別", type: "select", options: ["硬式", "軟式", "両方あり", "調整中"], critical: true },
-          { id: "jp_children_age", label: "子供の年齢層／学年", type: "text", placeholder: "例: 中学2〜3年生" },
-          { id: "jp_adults_count", label: "同行大人の人数", type: "number", placeholder: "例: 5" },
-          { id: "jp_gender", label: "男女の内訳", type: "text", placeholder: "例: 男子8名・女子4名" },
-          { id: "jp_skill_level", label: "選手のレベル感", type: "select", options: ["初級", "中級", "上級", "ミックス", "未確認"] },
-          { id: "jp_contact", label: "日本側窓口（学校・クラブ）", type: "text", placeholder: "例: ○○中学テニス部 顧問 田中先生" },
-        ]
-      },
-      {
-        id: "schedule", title: "📅 日程・滞在", color: "#1a5c3a",
-        fields: [
-          { id: "arrival_date", label: "来日日", type: "date", critical: true },
-          { id: "departure_date", label: "帰国日", type: "date", critical: true },
-          { id: "match_date", label: "試合実施日（第1希望）", type: "date", critical: true },
-          { id: "match_date2", label: "試合実施日（第2希望）", type: "date" },
-          { id: "match_duration", label: "試合・交流の合計時間（予定）", type: "text", placeholder: "例: 試合2時間＋交流1時間、計3時間", critical: true },
-          { id: "hotel_area", label: "宿泊エリア", type: "text", placeholder: "例: 福山市内、広島市内" },
-          { id: "other_schedule", label: "試合以外の予定（観光・体験等）", type: "textarea", placeholder: "例: 尾道観光、原爆ドーム見学、茶道体験" },
-        ]
-      },
-      {
-        id: "venue", title: "🎾 会場・設備", color: "#4a3580",
-        fields: [
-          { id: "venue_name", label: "試合会場（候補）", type: "text", placeholder: "例: 福山市営テニスコート", critical: true },
-          { id: "court_count", label: "必要コート数", type: "number", placeholder: "例: 4", critical: true },
-          { id: "court_surface", label: "コートの種類", type: "select", options: ["ハード", "クレー", "オムニ（砂入り人工芝）", "カーペット", "未確認"], critical: true },
-          { id: "equipment", label: "ボール・備品の準備", type: "select", options: ["アメリカ側持参", "日本側手配", "両者折半", "未確認"], critical: true },
-          { id: "changing_room", label: "更衣室・シャワー", type: "select", options: ["あり", "なし", "要確認"] },
-          { id: "accessibility", label: "会場へのアクセス（バス等）", type: "textarea", placeholder: "例: 宿泊先からバスで移動予定" },
-        ]
-      },
-      {
-        id: "match_format", title: "🏆 試合形式・ルール", color: "#8b5a00",
-        fields: [
-          { id: "match_type", label: "試合形式", type: "select", options: ["個人戦", "団体戦", "ダブルス中心", "シングルス中心", "ミックス", "フレンドリーマッチ（ルールゆるめ）", "未定"], critical: true },
-          { id: "scoring", label: "スコア方式", type: "text", placeholder: "例: タイブレーク先取、6ゲームマッチ等", critical: true },
-          { id: "referee", label: "審判の有無", type: "select", options: ["審判あり（外部）", "自己審判", "コーチが審判", "未定"] },
-          { id: "mixed_teams", label: "日米混合チーム戦あり？", type: "select", options: ["あり（予定）", "なし（完全対抗）", "状況次第", "未定"] },
-          { id: "language_match", label: "試合中の言語・コミュニケーション", type: "textarea", placeholder: "例: 通訳1名配置、基本英語、身振り手振りOK" },
-        ]
-      },
-      {
-        id: "exchange", title: "🤝 交流プログラム（思い込み防止）", color: "#005a8b",
-        fields: [
-          { id: "exchange_program", label: "試合後の交流内容", type: "textarea", placeholder: "例: カラオケ、食事会、お土産交換など", critical: true },
-          { id: "exchange_duration", label: "交流プログラムの時間（確定値）", type: "text", placeholder: "例: カラオケ2時間（部屋数・人数も要確認）", critical: true },
-          { id: "karaoke_rooms", label: "カラオケ等の場合：部屋数と1部屋の人数上限", type: "text", placeholder: "例: 20名→3部屋（1部屋7〜8名）＊1時間では少ない！" },
-          { id: "meal_preference", label: "食事の制限・アレルギー", type: "textarea", placeholder: "例: ベジタリアン1名、ナッツアレルギー1名" },
-          { id: "gift_exchange", label: "プレゼント交換の予定", type: "select", options: ["あり（双方準備）", "あり（日本側のみ）", "なし", "未定"] },
-          { id: "photo_ok", label: "写真・SNS掲載の可否", type: "select", options: ["全員OK", "子供は不可", "保護者確認要", "未定"] },
-        ]
-      },
-      {
-        id: "logistics", title: "🚌 移動・ロジスティクス", color: "#3d5a00",
-        fields: [
-          { id: "transport", label: "移動手段", type: "select", options: ["バス手配（日本側）", "バス手配（ツアー社長）", "電車＋徒歩", "未定"], critical: true },
-          { id: "transport_cost", label: "移動費の負担", type: "select", options: ["アメリカ側全額", "日本側全額", "折半", "参加者個人負担", "未定"], critical: true },
-          { id: "interpreter", label: "通訳の確保", type: "select", options: ["アメリカ側で準備", "日本側で準備", "双方1名ずつ", "不要（英語対応可）", "未手配"], critical: true },
-        ]
-      },
-      {
-        id: "cost", title: "💴 費用分担", color: "#5a005a",
-        fields: [
-          { id: "venue_cost", label: "会場費の負担", type: "select", options: ["アメリカ側", "日本側", "折半", "スポンサー", "未定"], critical: true },
-          { id: "meal_cost", label: "食事費の負担", type: "select", options: ["アメリカ側", "日本側", "折半", "各自負担", "未定"], critical: true },
-          { id: "coordinator_fee", label: "コーディネート費用の認識", type: "textarea", placeholder: "例: 日当・交通費・通訳費は別途請求、見積もり送付済み" },
-          { id: "contingency", label: "急な変更・キャンセル時のルール", type: "textarea", placeholder: "例: 1週間前まで無料、以降50%等" },
-        ]
-      },
-      {
-        id: "communication", title: "📱 連絡体制（報連相）", color: "#5a3000",
-        fields: [
-          { id: "us_contact_name", label: "アメリカ側窓口（氏名）", type: "text", critical: true },
-          { id: "us_contact_method", label: "アメリカ側の連絡手段", type: "select", options: ["WhatsApp", "Email", "LINE", "電話", "その他"], critical: true },
-          { id: "deadline_confirmation", label: "最終確認の締切日", type: "date", critical: true },
-          { id: "update_frequency", label: "進捗共有の頻度", type: "select", options: ["週1回", "2週に1回", "月1回", "都度連絡", "未定"] },
-          { id: "emergency_contact", label: "緊急連絡先（現地）", type: "text", placeholder: "例: ひさこさん携帯：090-XXXX-XXXX" },
-        ]
-      },
-      {
-        id: "notes", title: "📝 備考・未確認事項", color: "#3a3a3a",
-        fields: [
-          { id: "cultural_notes", label: "文化面での注意事項・確認済み事項", type: "textarea", placeholder: "例: 靴を脱ぐ場面あり事前周知済み、チップ文化の誤解なし確認済み" },
-          { id: "undecided", label: "まだ決まっていないこと（リスト）", type: "textarea", placeholder: "例: ①会場確定②交流プログラム詳細③通訳手配" },
-          { id: "memo", label: "その他メモ", type: "textarea", placeholder: "自由記入" },
-        ]
-      }
+// ── Default sections (used only on first load) ─────────────
+const DEFAULT_SECTIONS = [
+  {
+    id:"participants_us", title:"👥 参加者情報（アメリカ側）", titleEn:"👥 US Participants", color:"#1a3a6b",
+    fields:[
+      {id:"us_children_count", label:"子供（選手）の人数", labelEn:"Number of players", type:"number", placeholder:"例: 12", placeholderEn:"e.g. 12", critical:true},
+      {id:"us_tennis_style", label:"テニスの種別", labelEn:"Tennis type", type:"select", options:["硬式","軟式","両方あり","未確認"], optionsEn:["Hard ball","Soft ball","Both","Not confirmed"], critical:true},
+      {id:"us_children_age", label:"年齢層／学年", labelEn:"Age range / grade", type:"text", placeholder:"例: 14〜17歳", placeholderEn:"e.g. 14-17 yrs"},
+      {id:"us_adults_count", label:"同行大人の人数", labelEn:"Number of adults", type:"number", placeholder:"例: 5", placeholderEn:"e.g. 5", critical:true},
+      {id:"us_adults_role", label:"大人の役割・属性", labelEn:"Adults' roles", type:"textarea", placeholder:"例: 保護者2名、コーチ1名", placeholderEn:"e.g. 2 parents, 1 coach", critical:true},
+      {id:"us_columbine_relation", label:"コロンバイン高校との関係", labelEn:"Relation to Columbine High", type:"textarea", placeholder:"例: 全員保護者", placeholderEn:"e.g. All parents"},
+      {id:"us_gender", label:"男女の内訳", labelEn:"Gender breakdown", type:"text", placeholder:"例: 男子8名・女子4名", placeholderEn:"e.g. 8M / 4F"},
+      {id:"us_skill_level", label:"選手のレベル感", labelEn:"Skill level", type:"select", options:["初級","中級","上級","ミックス","未確認"], optionsEn:["Beginner","Intermediate","Advanced","Mixed","Not confirmed"]},
     ]
   },
-  en: {
-    appTitle: "Tour Coordination Checklist",
-    appSubtitle: "Columbine High School × Fukuyama & Hiroshima",
-    requiredProgress: "Required fields progress",
-    warningTitle: "⚠️ Assumption Prevention",
-    warningBody: "Never assume — confirm all times, numbers, and costs with both sides!\n🎤 Example: Karaoke for 20 people → How many rooms? How many hours? (1 hour is NOT enough!)",
-    required: "REQ",
-    summaryTitle: "📋 Overall Status",
-    statuses: ["Not filled", "Filled (needs check)", "Both sides agreed ✅"],
-    selectPlaceholder: "— Please select —",
-    saveButton: "💾 Save",
-    saving: "Saving…",
-    saved: "Saved ✅",
-    saveError: "Save failed",
-    connOk: "🟢 Connected: changes sync to both sides automatically",
-    connChecking: "🟡 Checking connection…",
-    connError: "🔴 Connection failed (please check Firebase settings)",
-    lastUpdated: "Last updated",
-    never: "Not saved yet",
-    sections: [
-      {
-        id: "participants_us", title: "👥 US Participants", color: "#1a3a6b",
-        fields: [
-          { id: "us_children_count", label: "Number of children (players)", type: "number", placeholder: "e.g. 12", critical: true },
-          { id: "us_tennis_style", label: "Tennis type", type: "select", options: ["Hard ball", "Soft ball", "Both", "Not confirmed"], critical: true },
-          { id: "us_children_age", label: "Age range / grade", type: "text", placeholder: "e.g. 14–17 years old (high school)" },
-          { id: "us_adults_count", label: "Number of accompanying adults", type: "number", placeholder: "e.g. 5", critical: true },
-          { id: "us_adults_role", label: "Adults' roles / affiliations", type: "textarea", placeholder: "e.g. 2 parents, 1 coach, 1 tour president, 1 interpreter", critical: true },
-          { id: "us_columbine_relation", label: "Adults' relation to Columbine High", type: "textarea", placeholder: "e.g. All parents / Coach is school staff / Tour president is external" },
-          { id: "us_gender", label: "Gender breakdown", type: "text", placeholder: "e.g. 8 male, 4 female" },
-          { id: "us_skill_level", label: "Player skill level", type: "select", options: ["Beginner", "Intermediate", "Advanced", "Mixed", "Not confirmed"] },
-        ]
-      },
-      {
-        id: "participants_jp", title: "👥 Japan Participants", color: "#8b0000",
-        fields: [
-          { id: "jp_city", label: "Participating region(s)", type: "select", options: ["Fukuyama only", "Hiroshima only", "Fukuyama + Hiroshima", "TBD"], critical: true },
-          { id: "jp_children_count", label: "Number of children (players)", type: "number", placeholder: "e.g. 12", critical: true },
-          { id: "jp_tennis_style", label: "Tennis type", type: "select", options: ["Hard ball", "Soft ball", "Both", "Being arranged"], critical: true },
-          { id: "jp_children_age", label: "Age range / grade", type: "text", placeholder: "e.g. 2nd–3rd year junior high" },
-          { id: "jp_adults_count", label: "Number of accompanying adults", type: "number", placeholder: "e.g. 5" },
-          { id: "jp_gender", label: "Gender breakdown", type: "text", placeholder: "e.g. 8 male, 4 female" },
-          { id: "jp_skill_level", label: "Player skill level", type: "select", options: ["Beginner", "Intermediate", "Advanced", "Mixed", "Not confirmed"] },
-          { id: "jp_contact", label: "Japan-side contact (school / club)", type: "text", placeholder: "e.g. Tanaka-sensei, Tennis Club, XX Junior High" },
-        ]
-      },
-      {
-        id: "schedule", title: "📅 Schedule & Stay", color: "#1a5c3a",
-        fields: [
-          { id: "arrival_date", label: "Arrival date in Japan", type: "date", critical: true },
-          { id: "departure_date", label: "Departure date from Japan", type: "date", critical: true },
-          { id: "match_date", label: "Match date (1st choice)", type: "date", critical: true },
-          { id: "match_date2", label: "Match date (2nd choice)", type: "date" },
-          { id: "match_duration", label: "Total time for match + exchange (planned)", type: "text", placeholder: "e.g. Match 2hrs + Exchange 1hr = 3hrs total", critical: true },
-          { id: "hotel_area", label: "Accommodation area", type: "text", placeholder: "e.g. Fukuyama city, Hiroshima city" },
-          { id: "other_schedule", label: "Other plans (sightseeing, experiences)", type: "textarea", placeholder: "e.g. Onomichi sightseeing, A-bomb Dome, tea ceremony" },
-        ]
-      },
-      {
-        id: "venue", title: "🎾 Venue & Facilities", color: "#4a3580",
-        fields: [
-          { id: "venue_name", label: "Match venue (candidate)", type: "text", placeholder: "e.g. Fukuyama City Tennis Courts", critical: true },
-          { id: "court_count", label: "Number of courts needed", type: "number", placeholder: "e.g. 4", critical: true },
-          { id: "court_surface", label: "Court surface type", type: "select", options: ["Hard", "Clay", "Omni (sand artificial turf)", "Carpet", "Not confirmed"], critical: true },
-          { id: "equipment", label: "Balls & equipment", type: "select", options: ["US side brings", "Japan side arranges", "Split", "Not confirmed"], critical: true },
-          { id: "changing_room", label: "Changing rooms / showers", type: "select", options: ["Available", "Not available", "To be confirmed"] },
-          { id: "accessibility", label: "Access to venue (bus etc.)", type: "textarea", placeholder: "e.g. Bus from hotel to venue" },
-        ]
-      },
-      {
-        id: "match_format", title: "🏆 Match Format & Rules", color: "#8b5a00",
-        fields: [
-          { id: "match_type", label: "Match format", type: "select", options: ["Individual", "Team", "Doubles-focused", "Singles-focused", "Mixed", "Friendly match (relaxed rules)", "TBD"], critical: true },
-          { id: "scoring", label: "Scoring system", type: "text", placeholder: "e.g. Tiebreak set, 6-game match", critical: true },
-          { id: "referee", label: "Referee", type: "select", options: ["Official referee", "Self-judging", "Coach as referee", "TBD"] },
-          { id: "mixed_teams", label: "Japan–US mixed teams?", type: "select", options: ["Yes (planned)", "No (full competition)", "Situational", "TBD"] },
-          { id: "language_match", label: "Language during match", type: "textarea", placeholder: "e.g. 1 interpreter on court, mainly English, gestures OK" },
-        ]
-      },
-      {
-        id: "exchange", title: "🤝 Exchange Program (Assumption Prevention!)", color: "#005a8b",
-        fields: [
-          { id: "exchange_program", label: "Exchange activity after match", type: "textarea", placeholder: "e.g. Karaoke, dinner, souvenir exchange", critical: true },
-          { id: "exchange_duration", label: "Exchange program duration (confirmed hours)", type: "text", placeholder: "e.g. Karaoke 2 hours (also confirm room count & capacity)", critical: true },
-          { id: "karaoke_rooms", label: "If karaoke: number of rooms & max people per room", type: "text", placeholder: "e.g. 20 people → 3 rooms (7–8 per room) *1 hour is too short!" },
-          { id: "meal_preference", label: "Dietary restrictions / allergies", type: "textarea", placeholder: "e.g. 1 vegetarian, 1 nut allergy" },
-          { id: "gift_exchange", label: "Gift exchange planned?", type: "select", options: ["Yes (both sides)", "Yes (Japan side only)", "None", "TBD"] },
-          { id: "photo_ok", label: "Photos / SNS posting", type: "select", options: ["All OK", "No children", "Parent consent needed", "TBD"] },
-        ]
-      },
-      {
-        id: "logistics", title: "🚌 Transportation & Logistics", color: "#3d5a00",
-        fields: [
-          { id: "transport", label: "Transportation method", type: "select", options: ["Bus (Japan arranges)", "Bus (Tour president arranges)", "Train + walking", "TBD"], critical: true },
-          { id: "transport_cost", label: "Who covers transport costs", type: "select", options: ["US side pays all", "Japan side pays all", "Split", "Each person pays", "TBD"], critical: true },
-          { id: "interpreter", label: "Interpreter arrangement", type: "select", options: ["US side provides", "Japan side provides", "1 each side", "Not needed", "Not arranged yet"], critical: true },
-        ]
-      },
-      {
-        id: "cost", title: "💵 Cost Sharing", color: "#5a005a",
-        fields: [
-          { id: "venue_cost", label: "Venue cost covered by", type: "select", options: ["US side", "Japan side", "Split", "Sponsor", "TBD"], critical: true },
-          { id: "meal_cost", label: "Meal costs covered by", type: "select", options: ["US side", "Japan side", "Split", "Each person pays", "TBD"], critical: true },
-          { id: "coordinator_fee", label: "Coordination fee agreement", type: "textarea", placeholder: "e.g. Daily fee + transport + interpreter billed separately; quote sent" },
-          { id: "contingency", label: "Cancellation / change policy", type: "textarea", placeholder: "e.g. Free up to 1 week before; 50% after that" },
-        ]
-      },
-      {
-        id: "communication", title: "📱 Communication (Reporting & Updates)", color: "#5a3000",
-        fields: [
-          { id: "us_contact_name", label: "US-side contact name", type: "text", critical: true },
-          { id: "us_contact_method", label: "US-side preferred contact method", type: "select", options: ["WhatsApp", "Email", "LINE", "Phone", "Other"], critical: true },
-          { id: "deadline_confirmation", label: "Final confirmation deadline", type: "date", critical: true },
-          { id: "update_frequency", label: "Update frequency", type: "select", options: ["Weekly", "Every 2 weeks", "Monthly", "As needed", "TBD"] },
-          { id: "emergency_contact", label: "Emergency contact (on-site)", type: "text", placeholder: "e.g. Hisako: 090-XXXX-XXXX" },
-        ]
-      },
-      {
-        id: "notes", title: "📝 Notes & Unconfirmed Items", color: "#3a3a3a",
-        fields: [
-          { id: "cultural_notes", label: "Cultural notes / confirmed cultural points", type: "textarea", placeholder: "e.g. Confirmed: removing shoes indoors explained; no tipping confusion" },
-          { id: "undecided", label: "Still undecided (list)", type: "textarea", placeholder: "e.g. ①Venue ②Exchange details ③Interpreter arrangement" },
-          { id: "memo", label: "Other notes", type: "textarea", placeholder: "Free notes" },
-        ]
-      }
+  {
+    id:"participants_jp", title:"👥 参加者情報（日本側）", titleEn:"👥 Japan Participants", color:"#8b0000",
+    fields:[
+      {id:"jp_city", label:"参加する地域", labelEn:"Region(s)", type:"select", options:["福山のみ","広島のみ","福山＋広島","未定"], optionsEn:["Fukuyama only","Hiroshima only","Both","TBD"], critical:true},
+      {id:"jp_children_count", label:"子供（選手）の人数", labelEn:"Number of players", type:"number", placeholder:"例: 12", placeholderEn:"e.g. 12", critical:true},
+      {id:"jp_tennis_style", label:"テニスの種別", labelEn:"Tennis type", type:"select", options:["硬式","軟式","両方あり","調整中"], optionsEn:["Hard ball","Soft ball","Both","Arranging"], critical:true},
+      {id:"jp_children_age", label:"年齢層／学年", labelEn:"Age range / grade", type:"text", placeholder:"例: 中学2〜3年生", placeholderEn:"e.g. 2nd-3rd yr junior high"},
+      {id:"jp_adults_count", label:"同行大人の人数", labelEn:"Number of adults", type:"number", placeholder:"例: 5", placeholderEn:"e.g. 5"},
+      {id:"jp_gender", label:"男女の内訳", labelEn:"Gender breakdown", type:"text", placeholder:"例: 男子8名・女子4名", placeholderEn:"e.g. 8M / 4F"},
+      {id:"jp_contact", label:"日本側窓口", labelEn:"Japan-side contact", type:"text", placeholder:"例: ○○中学 顧問 田中先生", placeholderEn:"e.g. Tanaka-sensei, XX Junior High"},
+    ]
+  },
+  {
+    id:"schedule", title:"📅 日程・滞在", titleEn:"📅 Schedule & Stay", color:"#1a5c3a",
+    fields:[
+      {id:"arrival_date", label:"来日日", labelEn:"Arrival date", type:"date", critical:true},
+      {id:"departure_date", label:"帰国日", labelEn:"Departure date", type:"date", critical:true},
+      {id:"match_date", label:"試合日（第1希望）", labelEn:"Match date (1st choice)", type:"date", critical:true},
+      {id:"match_date2", label:"試合日（第2希望）", labelEn:"Match date (2nd choice)", type:"date"},
+      {id:"match_duration", label:"合計時間（予定）", labelEn:"Total hours (planned)", type:"text", placeholder:"例: 試合2h＋交流1h", placeholderEn:"e.g. Match 2h + Social 1h", critical:true},
+      {id:"hotel_area", label:"宿泊エリア", labelEn:"Accommodation area", type:"text", placeholder:"例: 福山市内", placeholderEn:"e.g. Fukuyama city"},
+      {id:"other_schedule", label:"その他の予定", labelEn:"Other plans", type:"textarea", placeholder:"例: 尾道観光", placeholderEn:"e.g. Onomichi sightseeing"},
+    ]
+  },
+  {
+    id:"venue", title:"🎾 会場・設備", titleEn:"🎾 Venue & Facilities", color:"#4a3580",
+    fields:[
+      {id:"venue_name", label:"試合会場（候補）", labelEn:"Venue (candidate)", type:"text", placeholder:"例: 福山市営テニスコート", placeholderEn:"e.g. Fukuyama City Tennis Courts", critical:true},
+      {id:"court_count", label:"必要コート数", labelEn:"Courts needed", type:"number", placeholder:"例: 4", placeholderEn:"e.g. 4", critical:true},
+      {id:"court_surface", label:"コートの種類", labelEn:"Court surface", type:"select", options:["ハード","クレー","オムニ","カーペット","未確認"], optionsEn:["Hard","Clay","Omni","Carpet","Not confirmed"], critical:true},
+      {id:"equipment", label:"ボール・備品の準備", labelEn:"Balls & equipment", type:"select", options:["アメリカ側持参","日本側手配","両者折半","未確認"], optionsEn:["US side brings","Japan arranges","Split","Not confirmed"], critical:true},
+      {id:"changing_room", label:"更衣室・シャワー", labelEn:"Changing rooms / showers", type:"select", options:["あり","なし","要確認"], optionsEn:["Available","Not available","To confirm"]},
+      {id:"accessibility", label:"会場へのアクセス", labelEn:"Access to venue", type:"textarea", placeholder:"例: 宿泊先からバス", placeholderEn:"e.g. Bus from hotel"},
+    ]
+  },
+  {
+    id:"exchange", title:"🤝 交流プログラム", titleEn:"🤝 Exchange Program", color:"#005a8b",
+    fields:[
+      {id:"exchange_program", label:"試合後の交流内容", labelEn:"Exchange activity", type:"textarea", placeholder:"例: カラオケ、食事会", placeholderEn:"e.g. Karaoke, dinner", critical:true},
+      {id:"exchange_duration", label:"交流の時間（確定値）", labelEn:"Exchange duration (confirmed)", type:"text", placeholder:"例: カラオケ2時間", placeholderEn:"e.g. Karaoke 2 hours", critical:true},
+      {id:"karaoke_rooms", label:"カラオケ：部屋数と上限人数", labelEn:"Karaoke: rooms & capacity", type:"text", placeholder:"例: 3部屋（1部屋7名）", placeholderEn:"e.g. 3 rooms, 7 per room"},
+      {id:"meal_preference", label:"食事制限・アレルギー", labelEn:"Dietary restrictions / allergies", type:"textarea", placeholder:"例: ベジタリアン1名", placeholderEn:"e.g. 1 vegetarian"},
+      {id:"gift_exchange", label:"プレゼント交換", labelEn:"Gift exchange", type:"select", options:["あり（双方）","あり（日本側のみ）","なし","未定"], optionsEn:["Yes (both)","Yes (Japan only)","None","TBD"]},
+      {id:"photo_ok", label:"写真・SNS掲載の可否", labelEn:"Photos / SNS OK?", type:"select", options:["全員OK","子供は不可","保護者確認要","未定"], optionsEn:["All OK","No children","Parent consent","TBD"]},
+    ]
+  },
+  {
+    id:"logistics", title:"🚌 移動・ロジスティクス", titleEn:"🚌 Transportation", color:"#3d5a00",
+    fields:[
+      {id:"transport", label:"移動手段", labelEn:"Transportation", type:"select", options:["バス（日本側）","バス（ツアー社長）","電車＋徒歩","未定"], optionsEn:["Bus (Japan)","Bus (Tour president)","Train + walk","TBD"], critical:true},
+      {id:"transport_cost", label:"移動費の負担", labelEn:"Who covers transport costs", type:"select", options:["アメリカ側","日本側","折半","各自","未定"], optionsEn:["US side","Japan side","Split","Each person","TBD"], critical:true},
+      {id:"interpreter", label:"通訳の確保", labelEn:"Interpreter", type:"select", options:["アメリカ側で準備","日本側で準備","双方1名ずつ","不要","未手配"], optionsEn:["US side provides","Japan provides","1 each","Not needed","Not yet"], critical:true},
+    ]
+  },
+  {
+    id:"cost", title:"💴 費用分担", titleEn:"💵 Cost Sharing", color:"#5a005a",
+    fields:[
+      {id:"venue_cost", label:"会場費の負担", labelEn:"Venue cost", type:"select", options:["アメリカ側","日本側","折半","スポンサー","未定"], optionsEn:["US side","Japan side","Split","Sponsor","TBD"], critical:true},
+      {id:"meal_cost", label:"食事費の負担", labelEn:"Meal costs", type:"select", options:["アメリカ側","日本側","折半","各自負担","未定"], optionsEn:["US side","Japan side","Split","Each person","TBD"], critical:true},
+      {id:"coordinator_fee", label:"コーディネート費用の認識", labelEn:"Coordinator fee agreement", type:"textarea", placeholder:"例: 日当・交通費は別途請求", placeholderEn:"e.g. Daily fee + transport billed separately"},
+      {id:"contingency", label:"キャンセル時のルール", labelEn:"Cancellation policy", type:"textarea", placeholder:"例: 1週間前まで無料", placeholderEn:"e.g. Free up to 1 week before"},
+    ]
+  },
+  {
+    id:"communication", title:"📱 連絡体制", titleEn:"📱 Communication", color:"#5a3000",
+    fields:[
+      {id:"us_contact_name", label:"アメリカ側窓口（氏名）", labelEn:"US contact name", type:"text", critical:true},
+      {id:"us_contact_method", label:"アメリカ側の連絡手段", labelEn:"US contact method", type:"select", options:["WhatsApp","Email","LINE","電話","その他"], optionsEn:["WhatsApp","Email","LINE","Phone","Other"], critical:true},
+      {id:"deadline_confirmation", label:"最終確認の締切日", labelEn:"Final confirmation deadline", type:"date", critical:true},
+      {id:"update_frequency", label:"進捗共有の頻度", labelEn:"Update frequency", type:"select", options:["週1回","2週に1回","月1回","都度","未定"], optionsEn:["Weekly","Every 2 weeks","Monthly","As needed","TBD"]},
+      {id:"emergency_contact", label:"緊急連絡先（現地）", labelEn:"Emergency contact (on-site)", type:"text", placeholder:"例: ひさこ 090-XXXX", placeholderEn:"e.g. Hisako 090-XXXX"},
+    ]
+  },
+  {
+    id:"notes", title:"📝 備考・未確認事項", titleEn:"📝 Notes & Open Items", color:"#3a3a3a",
+    fields:[
+      {id:"cultural_notes", label:"文化面での注意事項", labelEn:"Cultural notes", type:"textarea", placeholder:"例: 靴を脱ぐ場面あり", placeholderEn:"e.g. Removing shoes indoors"},
+      {id:"undecided", label:"まだ決まっていないこと", labelEn:"Still undecided", type:"textarea", placeholder:"例: ①会場②通訳", placeholderEn:"e.g. ①Venue ②Interpreter"},
+      {id:"memo", label:"その他メモ", labelEn:"Other notes", type:"textarea", placeholder:"自由記入", placeholderEn:"Free notes"},
     ]
   }
-};
+];
 
-const STATUS_COLORS = { 0: "#888", 1: "#e6a817", 2: "#2e8b57" };
+const STATUS_COLORS = {0:"#888", 1:"#e6a817", 2:"#2e8b57"};
 
-function TourChecklist() {
+// ── Unique ID generator ───────────────────────────────────
+const uid = () => Math.random().toString(36).slice(2,9);
+
+// ═══════════════════════════════════════════════════════════
+// ADMIN PANEL
+// ═══════════════════════════════════════════════════════════
+function AdminPanel({ sections, onSave, onClose }) {
+  const [draft, setDraft] = useState(JSON.parse(JSON.stringify(sections)));
+  const [openSec, setOpenSec] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  const addSection = () => {
+    const id = "sec_" + uid();
+    setDraft(d => [...d, {
+      id, title:"新しいセクション", titleEn:"New Section",
+      color:"#444444", fields:[]
+    }]);
+    setOpenSec(id);
+  };
+
+  const removeSection = (id) => {
+    if (!window.confirm("このセクションを削除しますか？")) return;
+    setDraft(d => d.filter(s => s.id !== id));
+    if (openSec === id) setOpenSec(null);
+  };
+
+  const updateSection = (id, key, val) => {
+    setDraft(d => d.map(s => s.id === id ? {...s, [key]: val} : s));
+  };
+
+  const addField = (secId) => {
+    const f = {
+      id:"fld_"+uid(), label:"新しい項目", labelEn:"New Field",
+      type:"text", placeholder:"", placeholderEn:"", critical:false,
+      options:[], optionsEn:[]
+    };
+    setDraft(d => d.map(s => s.id === secId ? {...s, fields:[...s.fields, f]} : s));
+  };
+
+  const removeField = (secId, fldId) => {
+    setDraft(d => d.map(s => s.id === secId
+      ? {...s, fields: s.fields.filter(f => f.id !== fldId)} : s));
+  };
+
+  const updateField = (secId, fldId, key, val) => {
+    setDraft(d => d.map(s => s.id === secId
+      ? {...s, fields: s.fields.map(f => f.id === fldId ? {...f, [key]: val} : f)} : s));
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    await onSave(draft);
+    setSaving(false);
+  };
+
+  const s_ = {
+    overlay:{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:200,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"20px 12px",overflowY:"auto"},
+    panel:{background:"#fff",borderRadius:14,width:"100%",maxWidth:740,padding:0,overflow:"hidden",boxShadow:"0 8px 40px rgba(0,0,0,0.25)"},
+    header:{background:"#0a1628",color:"#fff",padding:"16px 20px",display:"flex",justifyContent:"space-between",alignItems:"center"},
+    body:{padding:"16px",maxHeight:"70vh",overflowY:"auto"},
+    secBlock:{border:"2px solid #e5e7eb",borderRadius:10,marginBottom:12,overflow:"hidden"},
+    secHead:{display:"flex",alignItems:"center",gap:8,padding:"10px 14px",background:"#f7f5f0",cursor:"pointer"},
+    secTitle:{fontWeight:700,fontSize:14,flex:1},
+    row:{display:"flex",gap:8,marginBottom:6,flexWrap:"wrap"},
+    label:{fontSize:12,fontWeight:600,color:"#374151",marginBottom:3,display:"block"},
+    inp:{width:"100%",padding:"7px 10px",border:"1.5px solid #d1d5db",borderRadius:6,fontSize:13},
+    sel:{width:"100%",padding:"7px 10px",border:"1.5px solid #d1d5db",borderRadius:6,fontSize:13,background:"#fff"},
+    fldBlock:{background:"#f9fafb",border:"1px solid #e5e7eb",borderRadius:8,padding:"10px 12px",marginBottom:8},
+    btn:{padding:"6px 14px",borderRadius:6,border:"none",fontSize:12,fontWeight:700,cursor:"pointer"},
+    addBtn:{background:"#e8a020",color:"#0a1628",padding:"8px 18px",borderRadius:8,border:"none",fontWeight:700,fontSize:13,cursor:"pointer"},
+    saveBtn:{background:"#059669",color:"#fff",padding:"12px 28px",borderRadius:8,border:"none",fontWeight:700,fontSize:14,cursor:"pointer"},
+    closeBtn:{background:"transparent",border:"1.5px solid rgba(255,255,255,0.4)",color:"#fff",padding:"6px 14px",borderRadius:6,fontWeight:600,fontSize:13,cursor:"pointer"},
+    danger:{background:"#fee2e2",color:"#b91c1c",padding:"4px 10px",borderRadius:6,border:"none",fontSize:11,fontWeight:700,cursor:"pointer"},
+    check:{accentColor:"#059669",width:14,height:14},
+    colSwatch:{width:28,height:28,borderRadius:6,border:"2px solid #d1d5db",cursor:"pointer"},
+  };
+
+  return (
+    <div style={s_.overlay}>
+      <div style={s_.panel}>
+        <div style={s_.header}>
+          <div>
+            <div style={{fontWeight:900,fontSize:16}}>⚙️ 管理画面 — セクション・項目を編集</div>
+            <div style={{fontSize:12,opacity:0.7,marginTop:2}}>変更後は「保存」を押してください</div>
+          </div>
+          <div style={{display:"flex",gap:8}}>
+            <button style={s_.saveBtn} onClick={handleSave} disabled={saving}>
+              {saving ? "保存中…" : "💾 保存"}
+            </button>
+            <button style={s_.closeBtn} onClick={onClose}>✕ 閉じる</button>
+          </div>
+        </div>
+
+        <div style={s_.body}>
+          {draft.map((sec, si) => (
+            <div key={sec.id} style={s_.secBlock}>
+              {/* Section header */}
+              <div style={{...s_.secHead, borderLeft:`4px solid ${sec.color}`}}
+                onClick={() => setOpenSec(openSec === sec.id ? null : sec.id)}>
+                <div style={{width:16,height:16,borderRadius:4,background:sec.color,flexShrink:0}}/>
+                <div style={s_.secTitle}>{sec.title}</div>
+                <span style={{fontSize:11,color:"#6b7280"}}>{sec.fields.length}項目</span>
+                <span style={{fontSize:14,color:"#6b7280"}}>{openSec === sec.id ? "▲" : "▼"}</span>
+                <button style={s_.danger} onClick={e=>{e.stopPropagation();removeSection(sec.id);}}>削除</button>
+              </div>
+
+              {openSec === sec.id && (
+                <div style={{padding:"12px 14px"}}>
+                  {/* Section meta */}
+                  <div style={s_.row}>
+                    <div style={{flex:1,minWidth:140}}>
+                      <label style={s_.label}>セクション名（日本語）</label>
+                      <input style={s_.inp} value={sec.title} onChange={e=>updateSection(sec.id,"title",e.target.value)}/>
+                    </div>
+                    <div style={{flex:1,minWidth:140}}>
+                      <label style={s_.label}>Section name (English)</label>
+                      <input style={s_.inp} value={sec.titleEn||""} onChange={e=>updateSection(sec.id,"titleEn",e.target.value)}/>
+                    </div>
+                    <div style={{flexShrink:0}}>
+                      <label style={s_.label}>カラー</label>
+                      <input type="color" value={sec.color} style={{width:44,height:32,border:"none",cursor:"pointer",borderRadius:6,padding:0}}
+                        onChange={e=>updateSection(sec.id,"color",e.target.value)}/>
+                    </div>
+                  </div>
+
+                  {/* Fields */}
+                  <div style={{marginTop:8}}>
+                    <div style={{fontSize:13,fontWeight:700,color:"#374151",marginBottom:8}}>項目一覧</div>
+                    {sec.fields.map((fld,fi) => (
+                      <div key={fld.id} style={s_.fldBlock}>
+                        <div style={{display:"flex",justifyContent:"space-between",marginBottom:8,alignItems:"center"}}>
+                          <div style={{fontSize:12,fontWeight:700,color:"#6b7280"}}>項目 {fi+1}</div>
+                          <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                            <label style={{fontSize:11,fontWeight:600,color:"#059669",display:"flex",gap:4,alignItems:"center",cursor:"pointer"}}>
+                              <input type="checkbox" checked={fld.critical||false} style={s_.check}
+                                onChange={e=>updateField(sec.id,fld.id,"critical",e.target.checked)}/>
+                              必須
+                            </label>
+                            <button style={s_.danger} onClick={()=>removeField(sec.id,fld.id)}>削除</button>
+                          </div>
+                        </div>
+                        <div style={s_.row}>
+                          <div style={{flex:1,minWidth:120}}>
+                            <label style={s_.label}>項目名（日本語）</label>
+                            <input style={s_.inp} value={fld.label} onChange={e=>updateField(sec.id,fld.id,"label",e.target.value)}/>
+                          </div>
+                          <div style={{flex:1,minWidth:120}}>
+                            <label style={s_.label}>Field name (English)</label>
+                            <input style={s_.inp} value={fld.labelEn||""} onChange={e=>updateField(sec.id,fld.id,"labelEn",e.target.value)}/>
+                          </div>
+                          <div style={{width:110}}>
+                            <label style={s_.label}>入力タイプ</label>
+                            <select style={s_.sel} value={fld.type} onChange={e=>updateField(sec.id,fld.id,"type",e.target.value)}>
+                              <option value="text">テキスト</option>
+                              <option value="number">数値</option>
+                              <option value="textarea">テキストエリア</option>
+                              <option value="date">日付</option>
+                              <option value="select">選択肢</option>
+                            </select>
+                          </div>
+                        </div>
+                        <div style={s_.row}>
+                          <div style={{flex:1}}>
+                            <label style={s_.label}>プレースホルダー（日本語）</label>
+                            <input style={s_.inp} value={fld.placeholder||""} onChange={e=>updateField(sec.id,fld.id,"placeholder",e.target.value)}/>
+                          </div>
+                          <div style={{flex:1}}>
+                            <label style={s_.label}>Placeholder (English)</label>
+                            <input style={s_.inp} value={fld.placeholderEn||""} onChange={e=>updateField(sec.id,fld.id,"placeholderEn",e.target.value)}/>
+                          </div>
+                        </div>
+                        {fld.type === "select" && (
+                          <div style={s_.row}>
+                            <div style={{flex:1}}>
+                              <label style={s_.label}>選択肢（日本語）1行1つ</label>
+                              <textarea rows={3} style={{...s_.inp,resize:"vertical"}}
+                                value={(fld.options||[]).join("\n")}
+                                onChange={e=>updateField(sec.id,fld.id,"options",e.target.value.split("\n").filter(x=>x.trim()))}/>
+                            </div>
+                            <div style={{flex:1}}>
+                              <label style={s_.label}>Options (English) one per line</label>
+                              <textarea rows={3} style={{...s_.inp,resize:"vertical"}}
+                                value={(fld.optionsEn||[]).join("\n")}
+                                onChange={e=>updateField(sec.id,fld.id,"optionsEn",e.target.value.split("\n").filter(x=>x.trim()))}/>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                    <button style={s_.addBtn} onClick={()=>addField(sec.id)}>＋ 項目を追加</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+
+          <button style={{...s_.addBtn, marginTop:8, width:"100%", padding:"12px"}} onClick={addSection}>
+            ＋ セクションを追加
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// MAIN APP
+// ═══════════════════════════════════════════════════════════
+function App() {
   const [lang, setLang] = useState("ja");
-  const [data, setData] = useState({});
+  const [sections, setSections] = useState(null); // null = loading
+  const [formData, setFormData] = useState({});
   const [statuses, setStatuses] = useState({});
-  const [openSection, setOpenSection] = useState("participants_us");
-  const [conn, setConn] = useState("checking"); // checking | ok | error
-  const [saveState, setSaveState] = useState("idle"); // idle | saving | saved | error
+  const [openSection, setOpenSection] = useState(null);
+  const [connStatus, setConnStatus] = useState("checking");
+  const [saveState, setSaveState] = useState("idle");
   const [lastUpdated, setLastUpdated] = useState(null);
+  const [showAdmin, setShowAdmin] = useState(false);
+  const skipRef = useRef(false);
 
-  const skipNextRef = useRef(false);
-
+  // Load sections from Firebase (or use defaults)
   useEffect(() => {
-    const ref = db.ref(DB_PATH);
-    const listener = ref.on("value", (snapshot) => {
-      if (skipNextRef.current) {
-        skipNextRef.current = false;
-        setConn("ok");
-        return;
+    const ref = db.ref(SECTIONS_PATH);
+    ref.once("value").then(snap => {
+      const val = snap.val();
+      setSections(val && val.length ? val : DEFAULT_SECTIONS);
+      if (openSection === null && (val||DEFAULT_SECTIONS).length > 0) {
+        setOpenSection((val||DEFAULT_SECTIONS)[0].id);
       }
-      const val = snapshot.val();
+    }).catch(() => {
+      setSections(DEFAULT_SECTIONS);
+      setOpenSection(DEFAULT_SECTIONS[0].id);
+    });
+  }, []);
+
+  // Real-time listener for checklist data
+  useEffect(() => {
+    const ref = db.ref(CHECKLIST_PATH);
+    const listener = ref.on("value", snap => {
+      if (skipRef.current) { skipRef.current = false; setConnStatus("ok"); return; }
+      const val = snap.val();
       if (val) {
-        setData(val.data || {});
+        setFormData(val.data || {});
         setStatuses(val.statuses || {});
         if (val.updatedAt) setLastUpdated(val.updatedAt);
       }
-      setConn("ok");
-    }, (err) => {
-      setConn("error");
-    });
+      setConnStatus("ok");
+    }, () => setConnStatus("error"));
     return () => ref.off("value", listener);
   }, []);
 
-  const t = T[lang];
-  const SECTIONS = t.sections;
-
-  const setValue = (id, value) => setData(d => ({ ...d, [id]: value }));
-  const setStatus = (id, value) => setStatuses(s => ({ ...s, [id]: value }));
+  const setValue = (id, val) => setFormData(d => ({...d, [id]: val}));
+  const setStatus = (id, val) => setStatuses(s => ({...s, [id]: val}));
 
   const handleSave = () => {
     setSaveState("saving");
     const now = new Date().toISOString();
-    skipNextRef.current = true;
-    db.ref(DB_PATH).set({ data, statuses, updatedAt: now })
-      .then(() => {
-        setLastUpdated(now);
-        setSaveState("saved");
-        setTimeout(() => setSaveState("idle"), 2000);
-      })
-      .catch(() => {
-        skipNextRef.current = false;
-        setSaveState("error");
-        setTimeout(() => setSaveState("idle"), 3000);
-      });
+    skipRef.current = true;
+    db.ref(CHECKLIST_PATH).set({data: formData, statuses, updatedAt: now})
+      .then(() => { setLastUpdated(now); setSaveState("saved"); setTimeout(()=>setSaveState("idle"),2000); })
+      .catch(() => { skipRef.current = false; setSaveState("error"); setTimeout(()=>setSaveState("idle"),3000); });
   };
 
-  const getSectionProgress = (section) => {
-    const criticalFields = section.fields.filter(f => f.critical);
-    const filled = criticalFields.filter(f => data[f.id] && data[f.id] !== "");
-    return { filled: filled.length, total: criticalFields.length };
+  const handleSaveSections = async (newSections) => {
+    await db.ref(SECTIONS_PATH).set(newSections);
+    setSections(newSections);
+    setShowAdmin(false);
   };
 
-  const totalCritical = SECTIONS.flatMap(s => s.fields.filter(f => f.critical));
-  const totalFilled = totalCritical.filter(f => data[f.id] && data[f.id] !== "");
-  const overallPct = totalCritical.length ? Math.round((totalFilled.length / totalCritical.length) * 100) : 0;
+  if (!sections) return (
+    <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",fontSize:16,color:"#6b7280"}}>
+      読み込み中…
+    </div>
+  );
+
+  const totalCritical = sections.flatMap(s => s.fields.filter(f => f.critical));
+  const totalFilled = totalCritical.filter(f => formData[f.id] && formData[f.id] !== "");
+  const overallPct = totalCritical.length ? Math.round(totalFilled.length / totalCritical.length * 100) : 0;
+
+  const t = (ja, en) => lang === "ja" ? ja : en;
+
+  const ss = {
+    page:{minHeight:"100vh",background:"#f7f5f0",fontFamily:"'Hiragino Kaku Gothic ProN','Noto Sans JP',sans-serif",paddingBottom:60},
+    header:{background:"linear-gradient(135deg,#0a1628 0%,#8b0000 100%)",color:"#fff",padding:"28px 20px 20px",borderBottom:"4px solid #e8a020"},
+    inner:{maxWidth:720,margin:"0 auto"},
+    langBar:{display:"flex",justifyContent:"flex-end",marginBottom:12,gap:6},
+    langBtn:(active)=>({padding:"5px 16px",borderRadius:16,border:"none",cursor:"pointer",fontWeight:700,fontSize:13,background:active?"#e8a020":"rgba(255,255,255,0.15)",color:active?"#0a1628":"rgba(255,255,255,0.8)",transition:"all 0.2s"}),
+    badge:{display:"inline-block",background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.2)",color:"#fff",padding:"4px 12px",borderRadius:16,fontSize:12,fontWeight:600,marginRight:6,marginBottom:4},
+    connOk:{fontSize:12,fontWeight:600,color:"#6ee7b7",marginTop:10},
+    connErr:{fontSize:12,fontWeight:600,color:"#fca5a5",marginTop:10},
+    connChk:{fontSize:12,fontWeight:600,color:"#fde68a",marginTop:10},
+    progressWrap:{marginTop:16,background:"rgba(255,255,255,0.15)",borderRadius:8,padding:"12px 14px"},
+    progressRow:{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:6},
+    progressBar:{height:8,background:"rgba(255,255,255,0.2)",borderRadius:4,overflow:"hidden"},
+    progressFill:(pct)=>({height:"100%",width:`${pct}%`,background:"#e8a020",borderRadius:4,transition:"width 0.5s"}),
+    saveBtn:(state)=>({width:"100%",padding:"12px",borderRadius:8,border:"none",fontWeight:700,fontSize:15,marginTop:10,cursor:state==="saving"?"default":"pointer",background:state==="saved"?"#059669":state==="error"?"#c8102e":"#e8a020",color:state==="saved"||state==="error"?"#fff":"#0a1628",opacity:state==="saving"?0.7:1}),
+    adminBtn:{background:"rgba(255,255,255,0.15)",border:"1.5px solid rgba(255,255,255,0.3)",color:"#fff",padding:"7px 16px",borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer",marginTop:10},
+    warning:{background:"#fff8e1",border:"2px solid #e8a020",borderRadius:10,padding:"12px 14px",marginBottom:16,fontSize:13,lineHeight:1.7},
+    secCard:{background:"#fff",borderRadius:12,marginBottom:10,boxShadow:"0 2px 8px rgba(0,0,0,0.07)",overflow:"hidden"},
+    secBtn:(isOpen,color)=>({width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 16px",background:isOpen?color:"#fff",color:isOpen?"#fff":"#1f2937",border:"none",cursor:"pointer",textAlign:"left",transition:"background 0.2s"}),
+    fieldWrap:{padding:"14px 14px 18px"},
+    fieldRow:{marginBottom:14},
+    fieldLabelRow:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:5},
+    req:{color:"#fff",background:"#c8102e",fontSize:10,fontWeight:700,padding:"1px 5px",borderRadius:4},
+    fieldLabel:{fontSize:13,fontWeight:600,color:"#1f2937",display:"flex",alignItems:"center",gap:5},
+    statusDots:{display:"flex",gap:4,alignItems:"center",flexShrink:0,marginLeft:8},
+    statusDot:(i,cur)=>({width:i===cur?26:18,height:18,borderRadius:9,background:i===cur?STATUS_COLORS[i]:"#e0e0e0",border:"none",cursor:"pointer",transition:"all 0.2s",fontSize:i===2&&i===cur?11:0,color:"#fff",fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center"}),
+    statusLabel:(i)=>({fontSize:10,color:STATUS_COLORS[i],fontWeight:600,minWidth:55}),
+    input:(filled,color)=>({width:"100%",padding:"8px 10px",border:`1.5px solid ${filled?color:"#d1d5db"}`,borderRadius:8,fontSize:13,fontFamily:"inherit",lineHeight:1.6}),
+    summaryBox:{marginTop:14,background:"#0a1628",color:"#fff",borderRadius:12,padding:"14px 18px",fontSize:13,lineHeight:1.8},
+  };
+
+  const statLabels = {
+    ja: ["未記入","記入済み（要確認）","双方合意✅"],
+    en: ["Not filled","Filled (to check)","Both agreed ✅"],
+  };
 
   return (
-    <div style={{
-      minHeight: "100vh",
-      background: "#f5f0e8",
-      fontFamily: lang === "ja"
-        ? "'Noto Sans JP', 'Hiragino Kaku Gothic ProN', sans-serif"
-        : "'Georgia', 'Segoe UI', sans-serif",
-      padding: "0 0 60px 0"
-    }}>
+    <div style={ss.page}>
+      {showAdmin && (
+        <AdminPanel
+          sections={sections}
+          onSave={handleSaveSections}
+          onClose={() => setShowAdmin(false)}
+        />
+      )}
+
       {/* Header */}
-      <div style={{
-        background: "linear-gradient(135deg, #1a3a6b 0%, #8b0000 100%)",
-        color: "#fff",
-        padding: "28px 24px 20px",
-        borderBottom: "4px solid #e6a817"
-      }}>
-        <div style={{ maxWidth: 720, margin: "0 auto" }}>
-          {/* Lang switcher */}
-          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
-            <div style={{ display: "flex", background: "rgba(255,255,255,0.15)", borderRadius: 20, padding: 3, gap: 3 }}>
-              {["ja", "en"].map(l => (
-                <button
-                  key={l}
-                  onClick={() => setLang(l)}
-                  style={{
-                    padding: "5px 16px", borderRadius: 16, border: "none", cursor: "pointer",
-                    fontWeight: 700, fontSize: 13,
-                    background: lang === l ? "#e6a817" : "transparent",
-                    color: lang === l ? "#1a3a6b" : "rgba(255,255,255,0.8)",
-                    transition: "all 0.2s", letterSpacing: l === "ja" ? 1 : 0,
-                  }}
-                >
-                  {l === "ja" ? "🇯🇵 日本語" : "🇺🇸 English"}
-                </button>
-              ))}
-            </div>
+      <div style={ss.header}>
+        <div style={ss.inner}>
+          <div style={ss.langBar}>
+            <button style={ss.langBtn(lang==="ja")} onClick={()=>setLang("ja")}>🇯🇵 日本語</button>
+            <button style={ss.langBtn(lang==="en")} onClick={()=>setLang("en")}>🇺🇸 English</button>
+          </div>
+          <div style={{fontSize:11,letterSpacing:3,opacity:0.7,marginBottom:6}}>🎾 JAPAN–USA TENNIS TOUR</div>
+          <h1 style={{fontSize:20,fontWeight:900,lineHeight:1.3,margin:0}}>
+            {t("ツアーコーディネート チェックリスト","Tour Coordination Checklist")}
+          </h1>
+          <div style={{marginTop:4,fontSize:13,opacity:0.85}}>
+            {t("コロンバイン高校 × 福山・広島","Columbine High School × Fukuyama & Hiroshima")}
           </div>
 
-          <div style={{ fontSize: 11, letterSpacing: 3, opacity: 0.7, marginBottom: 6 }}>
-            🎾 JAPAN–USA TENNIS TOUR
+          {/* Badges */}
+          <div style={{marginTop:10}}>
+            {connStatus==="ok" && <span style={ss.connOk}>🟢 {t("接続OK・自動で双方に反映","Connected — syncing both sides")}</span>}
+            {connStatus==="checking" && <span style={ss.connChk}>🟡 {t("接続確認中…","Checking connection…")}</span>}
+            {connStatus==="error" && <span style={ss.connErr}>🔴 {t("接続できません","Connection failed")}</span>}
           </div>
-          <h1 style={{ margin: 0, fontSize: 21, fontWeight: 700, lineHeight: 1.3 }}>{t.appTitle}</h1>
-          <div style={{ marginTop: 5, fontSize: 13, opacity: 0.85 }}>{t.appSubtitle}</div>
 
           {/* Progress */}
-          <div style={{ marginTop: 18, background: "rgba(255,255,255,0.15)", borderRadius: 8, padding: "12px 16px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 6 }}>
-              <span>{t.requiredProgress}</span>
-              <span style={{ fontWeight: 700, color: "#e6a817" }}>
-                {totalFilled.length} / {totalCritical.length} ({overallPct}%)
-              </span>
+          <div style={ss.progressWrap}>
+            <div style={ss.progressRow}>
+              <span>{t("必須項目の記入進捗","Required fields progress")}</span>
+              <span style={{fontWeight:700,color:"#e8a020"}}>{totalFilled.length} / {totalCritical.length} ({overallPct}%)</span>
             </div>
-            <div style={{ height: 8, background: "rgba(255,255,255,0.2)", borderRadius: 4, overflow: "hidden" }}>
-              <div style={{ height: "100%", width: `${overallPct}%`, background: "#e6a817", borderRadius: 4, transition: "width 0.5s" }} />
-            </div>
+            <div style={ss.progressBar}><div style={ss.progressFill(overallPct)}/></div>
           </div>
 
-          {/* Connection status */}
-          <div style={{ marginTop: 12, fontSize: 12, fontWeight: 600 }}>
-            {conn === "checking" ? t.connChecking : conn === "ok" ? t.connOk : t.connError}
+          {/* Save */}
+          <button style={ss.saveBtn(saveState)} onClick={handleSave} disabled={saveState==="saving"}>
+            {saveState==="saving" ? t("保存中…","Saving…")
+             : saveState==="saved" ? t("保存しました✅","Saved ✅")
+             : saveState==="error" ? t("⚠️ 保存に失敗しました","⚠️ Save failed")
+             : t("💾 保存する","💾 Save")}
+          </button>
+
+          <div style={{marginTop:8,fontSize:11,opacity:0.7}}>
+            {t("最終更新","Last updated")}: {lastUpdated ? new Date(lastUpdated).toLocaleString(lang==="ja"?"ja-JP":"en-US") : t("まだ保存されていません","Not saved yet")}
           </div>
 
-          {/* Save button */}
-          <div style={{ marginTop: 10 }}>
-            <button
-              onClick={handleSave}
-              disabled={saveState === "saving"}
-              style={{
-                width: "100%", padding: "12px 16px", borderRadius: 8, border: "none",
-                cursor: saveState === "saving" ? "default" : "pointer",
-                fontWeight: 700, fontSize: 15,
-                background: saveState === "saved" ? "#2e8b57" : saveState === "error" ? "#c00" : "#e6a817",
-                color: saveState === "saved" || saveState === "error" ? "#fff" : "#1a3a6b",
-                opacity: saveState === "saving" ? 0.7 : 1,
-              }}
-            >
-              {saveState === "saving" ? t.saving : saveState === "saved" ? t.saved : saveState === "error" ? `⚠️ ${t.saveError}` : t.saveButton}
-            </button>
-          </div>
-
-          <div style={{ marginTop: 8, fontSize: 11, opacity: 0.75 }}>
-            {t.lastUpdated}: {lastUpdated ? new Date(lastUpdated).toLocaleString(lang === "ja" ? "ja-JP" : "en-US") : t.never}
-          </div>
+          {/* Admin button */}
+          <button style={ss.adminBtn} onClick={()=>setShowAdmin(true)}>
+            ⚙️ {t("管理画面（セクション・項目を編集）","Admin: Edit sections & fields")}
+          </button>
         </div>
       </div>
 
-      <div style={{ maxWidth: 720, margin: "0 auto", padding: "20px 16px" }}>
+      {/* Body */}
+      <div style={{maxWidth:720,margin:"0 auto",padding:"18px 14px"}}>
         {/* Warning */}
-        <div style={{ background: "#fff8e1", border: "2px solid #e6a817", borderRadius: 10, padding: "12px 16px", marginBottom: 20, fontSize: 13, lineHeight: 1.7 }}>
-          <div style={{ fontWeight: 700, marginBottom: 4 }}>{t.warningTitle}</div>
-          {t.warningBody.split("\n").map((line, i) => <div key={i}>{line}</div>)}
+        <div style={ss.warning}>
+          <div style={{fontWeight:700,marginBottom:4}}>⚠️ {t("思い込み防止メモ","Assumption Prevention")}</div>
+          {t("「当然こうだろう」は禁物！時間・人数・費用はすべて数字で双方確認を。",
+             "Never assume — confirm all times, numbers, and costs with both sides!")}<br/>
+          🎤 {t("例：カラオケ20名→部屋数は？何時間？（1時間は少ない！）",
+               "e.g. Karaoke for 20 people → how many rooms? How many hours? (1 hour is too short!)")}
         </div>
 
         {/* Sections */}
-        {SECTIONS.map(section => {
-          const prog = getSectionProgress(section);
-          const isOpen = openSection === section.id;
+        {sections.map(sec => {
+          const critFields = sec.fields.filter(f=>f.critical);
+          const filled = critFields.filter(f=>formData[f.id]&&formData[f.id]!=="");
+          const isOpen = openSection === sec.id;
+          const l = lang;
           return (
-            <div key={section.id} style={{
-              background: "#fff", borderRadius: 12, marginBottom: 12,
-              boxShadow: "0 2px 8px rgba(0,0,0,0.08)", overflow: "hidden",
-              border: `2px solid ${isOpen ? section.color : "transparent"}`
-            }}>
-              <button
-                onClick={() => setOpenSection(isOpen ? null : section.id)}
-                style={{
-                  width: "100%", display: "flex", alignItems: "center",
-                  justifyContent: "space-between", padding: "14px 16px",
-                  background: isOpen ? section.color : "#fff",
-                  color: isOpen ? "#fff" : "#333",
-                  border: "none", cursor: "pointer", textAlign: "left", transition: "background 0.2s"
-                }}
-              >
-                <div style={{ fontWeight: 700, fontSize: 15 }}>{section.title}</div>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <div style={{
-                    fontSize: 12,
-                    background: prog.filled === prog.total ? "#2e8b57" : "rgba(0,0,0,0.15)",
-                    color: isOpen ? "#fff" : (prog.filled === prog.total ? "#fff" : "#555"),
-                    padding: "2px 8px", borderRadius: 12, fontWeight: 600
-                  }}>
-                    {prog.filled}/{prog.total} {t.required}
+            <div key={sec.id} style={{...ss.secCard, border:`2px solid ${isOpen?sec.color:"transparent"}`}}>
+              <button style={ss.secBtn(isOpen, sec.color)}
+                onClick={()=>setOpenSection(isOpen?null:sec.id)}>
+                <div style={{fontWeight:700,fontSize:15}}>{l==="ja"?sec.title:sec.titleEn||sec.title}</div>
+                <div style={{display:"flex",alignItems:"center",gap:8}}>
+                  <div style={{fontSize:12,background:filled.length===critFields.length?"#2e8b57":"rgba(0,0,0,0.12)",color:isOpen?"#fff":(filled.length===critFields.length?"#fff":"#555"),padding:"2px 8px",borderRadius:12,fontWeight:600}}>
+                    {filled.length}/{critFields.length} {l==="ja"?"必須":"REQ"}
                   </div>
-                  <span style={{ fontSize: 16 }}>{isOpen ? "▲" : "▼"}</span>
+                  <span style={{fontSize:15}}>{isOpen?"▲":"▼"}</span>
                 </div>
               </button>
 
               {isOpen && (
-                <div style={{ padding: "16px 16px 20px" }}>
-                  {section.fields.map(field => {
-                    const statusIdx = statuses[field.id] !== undefined ? statuses[field.id] : 0;
+                <div style={ss.fieldWrap}>
+                  {sec.fields.map(fld => {
+                    const statusIdx = statuses[fld.id] !== undefined ? statuses[fld.id] : 0;
+                    const label = l==="ja" ? fld.label : (fld.labelEn || fld.label);
+                    const placeholder = l==="ja" ? (fld.placeholder||"") : (fld.placeholderEn||fld.placeholder||"");
+                    const opts = l==="ja" ? (fld.options||[]) : (fld.optionsEn||fld.options||[]);
+                    const optsJa = fld.options||[];
+                    const filled = formData[fld.id] && formData[fld.id] !== "";
                     return (
-                      <div key={field.id} style={{ marginBottom: 16 }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 5 }}>
-                          <label style={{ fontSize: 13, fontWeight: 600, color: "#333", display: "flex", alignItems: "center", gap: 5 }}>
-                            {field.critical && (
-                              <span style={{ color: "#fff", background: "#c00", fontSize: 10, fontWeight: 700, padding: "1px 5px", borderRadius: 4 }}>
-                                {t.required}
-                              </span>
-                            )}
-                            {field.label}
+                      <div key={fld.id} style={ss.fieldRow}>
+                        <div style={ss.fieldLabelRow}>
+                          <label style={ss.fieldLabel}>
+                            {fld.critical && <span style={ss.req}>{l==="ja"?"必須":"REQ"}</span>}
+                            {label}
                           </label>
-                          <div style={{ display: "flex", gap: 4, alignItems: "center", flexShrink: 0, marginLeft: 8 }}>
-                            {[0, 1, 2].map(i => (
-                              <button
-                                key={i}
-                                title={t.statuses[i]}
-                                onClick={() => setStatus(field.id, i)}
-                                style={{
-                                  width: i === statusIdx ? 26 : 18, height: 18, borderRadius: 9,
-                                  background: statusIdx === i ? STATUS_COLORS[i] : "#e0e0e0",
-                                  border: "none", cursor: "pointer", transition: "all 0.2s",
-                                  fontSize: i === 2 && statusIdx === 2 ? 11 : 0,
-                                  color: "#fff", fontWeight: 700,
-                                  display: "flex", alignItems: "center", justifyContent: "center"
-                                }}
-                              >
-                                {i === 2 && statusIdx === 2 ? "✓" : ""}
+                          <div style={ss.statusDots}>
+                            {[0,1,2].map(i=>(
+                              <button key={i} title={statLabels[l][i]}
+                                onClick={()=>setStatus(fld.id,i)}
+                                style={ss.statusDot(i,statusIdx)}>
+                                {i===2&&statusIdx===2?"✓":""}
                               </button>
                             ))}
-                            <span style={{ fontSize: 10, color: STATUS_COLORS[statusIdx], fontWeight: 600, minWidth: 60 }}>
-                              {t.statuses[statusIdx]}
-                            </span>
+                            <span style={ss.statusLabel(statusIdx)}>{statLabels[l][statusIdx]}</span>
                           </div>
                         </div>
 
-                        {field.type === "textarea" ? (
-                          <textarea
-                            value={data[field.id] || ""}
-                            onChange={e => setValue(field.id, e.target.value)}
-                            placeholder={field.placeholder}
-                            rows={3}
-                            style={{
-                              width: "100%", padding: "8px 10px",
-                              border: `1.5px solid ${data[field.id] ? section.color : "#ddd"}`,
-                              borderRadius: 8, fontSize: 13, resize: "vertical",
-                              fontFamily: "inherit", lineHeight: 1.6
-                            }}
-                          />
-                        ) : field.type === "select" ? (
-                          <select
-                            value={data[field.id] || ""}
-                            onChange={e => setValue(field.id, e.target.value)}
-                            style={{
-                              width: "100%", padding: "8px 10px",
-                              border: `1.5px solid ${data[field.id] ? section.color : "#ddd"}`,
-                              borderRadius: 8, fontSize: 13, background: "#fff", cursor: "pointer"
-                            }}
-                          >
-                            <option value="">{t.selectPlaceholder}</option>
-                            {field.options.map(o => <option key={o} value={o}>{o}</option>)}
+                        {fld.type==="textarea" ? (
+                          <textarea value={formData[fld.id]||""} onChange={e=>setValue(fld.id,e.target.value)}
+                            placeholder={placeholder} rows={3}
+                            style={{...ss.input(filled,sec.color),resize:"vertical"}}/>
+                        ) : fld.type==="select" ? (
+                          <select value={formData[fld.id]||""} onChange={e=>setValue(fld.id,e.target.value)}
+                            style={{...ss.input(filled,sec.color),cursor:"pointer"}}>
+                            <option value="">{l==="ja"?"— 選択してください —":"— Please select —"}</option>
+                            {opts.map((o,i)=>(
+                              <option key={o} value={optsJa[i]||o}>{o}</option>
+                            ))}
                           </select>
                         ) : (
-                          <input
-                            type={field.type}
-                            value={data[field.id] || ""}
-                            onChange={e => setValue(field.id, e.target.value)}
-                            placeholder={field.placeholder}
-                            style={{
-                              width: "100%", padding: "8px 10px",
-                              border: `1.5px solid ${data[field.id] ? section.color : "#ddd"}`,
-                              borderRadius: 8, fontSize: 13, fontFamily: "inherit"
-                            }}
-                          />
+                          <input type={fld.type} value={formData[fld.id]||""} onChange={e=>setValue(fld.id,e.target.value)}
+                            placeholder={placeholder}
+                            style={ss.input(filled,sec.color)}/>
                         )}
                       </div>
                     );
@@ -573,46 +603,36 @@ function TourChecklist() {
         })}
 
         {/* Summary */}
-        <div style={{ marginTop: 16, background: "#1a3a6b", color: "#fff", borderRadius: 12, padding: "16px 20px", fontSize: 13, lineHeight: 1.8 }}>
-          <div style={{ fontWeight: 700, marginBottom: 8, color: "#e6a817" }}>{t.summaryTitle}</div>
-          {SECTIONS.map(s => {
-            const p = getSectionProgress(s);
-            return (
-              <div key={s.id} style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid rgba(255,255,255,0.1)", padding: "3px 0" }}>
-                <span style={{ fontSize: 12 }}>{s.title}</span>
-                <span style={{ fontSize: 12, color: p.filled === p.total ? "#7dffb0" : "#e6a817" }}>
-                  {p.filled === p.total ? "✅" : `${p.filled}/${p.total}`}
+        <div style={ss.summaryBox}>
+          <div style={{fontWeight:700,marginBottom:8,color:"#e8a020"}}>
+            📋 {t("全体ステータス確認","Overall Status")}
+          </div>
+          {sections.map(s=>{
+            const c=s.fields.filter(f=>f.critical);
+            const f=c.filter(f=>formData[f.id]&&formData[f.id]!=="");
+            return(
+              <div key={s.id} style={{display:"flex",justifyContent:"space-between",borderBottom:"1px solid rgba(255,255,255,0.1)",padding:"3px 0"}}>
+                <span style={{fontSize:12}}>{lang==="ja"?s.title:s.titleEn||s.title}</span>
+                <span style={{fontSize:12,color:f.length===c.length?"#6ee7b7":"#fde68a"}}>
+                  {f.length===c.length?"✅":`${f.length}/${c.length}`}
                 </span>
               </div>
             );
           })}
         </div>
 
-        {/* Bottom save button (for long pages) */}
-        <div style={{ marginTop: 16 }}>
-          <button
-            onClick={handleSave}
-            disabled={saveState === "saving"}
-            style={{
-              width: "100%", padding: "14px 16px", borderRadius: 10, border: "none",
-              cursor: saveState === "saving" ? "default" : "pointer",
-              fontWeight: 700, fontSize: 16,
-              background: saveState === "saved" ? "#2e8b57" : saveState === "error" ? "#c00" : "#e6a817",
-              color: saveState === "saved" || saveState === "error" ? "#fff" : "#1a3a6b",
-              opacity: saveState === "saving" ? 0.7 : 1,
-              boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
-            }}
-          >
-            {saveState === "saving" ? t.saving : saveState === "saved" ? t.saved : saveState === "error" ? `⚠️ ${t.saveError}` : t.saveButton}
-          </button>
-        </div>
+        {/* Bottom save */}
+        <button style={{...ss.saveBtn(saveState),marginTop:14,padding:"14px"}} onClick={handleSave} disabled={saveState==="saving"}>
+          {saveState==="saving" ? t("保存中…","Saving…")
+           : saveState==="saved" ? t("保存しました✅","Saved ✅")
+           : t("💾 保存する","💾 Save")}
+        </button>
       </div>
     </div>
   );
 }
 
-const root = ReactDOM.createRoot(document.getElementById("root"));
-root.render(<TourChecklist />);
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
 </script>
 </body>
 </html>
