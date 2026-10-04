@@ -18,6 +18,13 @@
 body{font-family:'Hiragino Kaku Gothic ProN','Noto Sans JP',sans-serif;background:var(--offwhite);color:var(--navy);padding-bottom:60px;}
 button{font-family:inherit;cursor:pointer;}
 input,select,textarea{font-family:inherit;}
+.roster-row{display:grid;grid-template-columns:32px minmax(120px,2fr) minmax(72px,1fr) minmax(92px,1fr) 34px;gap:6px;align-items:center;margin-bottom:7px;}
+@media (max-width:520px){
+  .roster-row{grid-template-columns:28px minmax(0,1fr) 34px;align-items:start;}
+  .roster-number{grid-column:1;grid-row:1 / span 3;padding-top:9px;}
+  .roster-name,.roster-age,.roster-gender{grid-column:2;}
+  .roster-remove{grid-column:3;grid-row:1 / span 3;}
+}
 </style>
 </head>
 <body>
@@ -40,6 +47,7 @@ firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 const CHECKLIST_PATH = "tennisTourChecklist2";
 const SECTIONS_PATH  = "tennisTourSections";
+const ROSTER_STORAGE_KEY = "tennisTourParticipantRosterV1";
 
 // ── Default sections (used only on first load) ─────────────
 const DEFAULT_SECTIONS = [
@@ -138,6 +146,96 @@ const DEFAULT_SECTIONS = [
     ]
   }
 ];
+
+// These required aggregate fields are merged into remotely configured sections
+// without deleting existing checklist data. The previous free-text gender values
+// remain in Firebase for backwards compatibility, but are no longer displayed.
+const PARTICIPANT_FIELD_UPGRADES = {
+  participants_us: [
+    {id:"us_boys_count", label:"男子選手の人数", labelEn:"Number of male players", type:"number", placeholder:"例: 8", placeholderEn:"e.g. 8", critical:true},
+    {id:"us_girls_count", label:"女子選手の人数", labelEn:"Number of female players", type:"number", placeholder:"例: 4", placeholderEn:"e.g. 4", critical:true},
+  ],
+  participants_jp: [
+    {id:"jp_boys_count", label:"男子選手の人数", labelEn:"Number of male players", type:"number", placeholder:"例: 8", placeholderEn:"e.g. 8", critical:true},
+    {id:"jp_girls_count", label:"女子選手の人数", labelEn:"Number of female players", type:"number", placeholder:"例: 4", placeholderEn:"e.g. 4", critical:true},
+  ],
+};
+
+function withParticipantFields(sourceSections) {
+  return sourceSections.map(section => {
+    const upgrades = PARTICIPANT_FIELD_UPGRADES[section.id];
+    if (!upgrades) return section;
+    const upgradeIds = new Set(upgrades.map(field => field.id));
+    const side = section.id === "participants_us" ? "us" : "jp";
+    const retained = section.fields
+      .filter(field => field.id !== `${side}_gender` && !upgradeIds.has(field.id))
+      .map(field => field.id === `${side}_children_age`
+        ? {...field, label:"年齢層／学年（全体の目安）", labelEn:"Age range / grade (overview)", placeholder:"例: 14〜17歳（個人別年齢は名簿で管理）", placeholderEn:"e.g. 14-17 (individual ages are managed separately)"}
+        : field);
+    const countId = section.id === "participants_us" ? "us_children_count" : "jp_children_count";
+    const countIndex = retained.findIndex(field => field.id === countId);
+    const fields = [...retained];
+    fields.splice(countIndex >= 0 ? countIndex + 1 : 0, 0, ...upgrades);
+    return {...section, fields};
+  });
+}
+
+function ParticipantCountSummary({side, formData, lang}) {
+  const players = Number(formData[`${side}_children_count`] || 0);
+  const boys = Number(formData[`${side}_boys_count`] || 0);
+  const girls = Number(formData[`${side}_girls_count`] || 0);
+  const total = boys + girls;
+  const hasAll = formData[`${side}_boys_count`] !== undefined && formData[`${side}_boys_count`] !== ""
+    && formData[`${side}_girls_count`] !== undefined && formData[`${side}_girls_count`] !== "";
+  const matches = players > 0 && hasAll && total === players;
+  const t = (ja,en) => lang === "ja" ? ja : en;
+  return (
+    <div style={{marginTop:10,padding:"10px 12px",borderRadius:8,background:matches?"#ecfdf5":"#fff7ed",border:`1px solid ${matches?"#a7f3d0":"#fed7aa"}`,fontSize:12}}>
+      <strong>{t("人数確認","Count check")}：</strong>
+      {t("男子","Male")} {boys}{t("名","")} ＋ {t("女子","Female")} {girls}{t("名","")} ＝ {total}{t("名","")}
+      <span style={{marginLeft:8,color:matches?"#047857":"#b45309",fontWeight:700}}>
+        {matches ? `✅ ${t("選手人数と一致","Matches player count")}` : `⚠️ ${t("選手人数と一致させてください","Must match player count")}`}
+      </span>
+    </div>
+  );
+}
+
+function ParticipantRoster({side, lang, rows, onChange}) {
+  const t = (ja,en) => lang === "ja" ? ja : en;
+  const addRow = () => onChange([...rows, {id:uid(), name:"", age:"", gender:""}]);
+  const updateRow = (id, key, value) => onChange(rows.map(row => row.id === id ? {...row, [key]:value} : row));
+  const removeRow = (id) => onChange(rows.filter(row => row.id !== id));
+  const inputStyle = {width:"100%",padding:"8px 9px",border:"1px solid #cbd5e1",borderRadius:7,fontSize:13,minWidth:0};
+  return (
+    <div style={{marginTop:14,padding:"12px",border:"1px solid #cbd5e1",borderRadius:10,background:"#f8fafc"}}>
+      <div style={{display:"flex",justifyContent:"space-between",gap:8,alignItems:"center",marginBottom:8}}>
+        <strong style={{fontSize:13}}>{t("参加者名簿（名前・年齢・男女）","Participant roster (name, age, gender)")}</strong>
+        <button type="button" onClick={addRow} style={{border:"none",borderRadius:7,padding:"7px 10px",background:"#0a1628",color:"#fff",fontWeight:700}}>
+          ＋ {t("追加","Add")}
+        </button>
+      </div>
+      <div style={{fontSize:11,lineHeight:1.6,color:"#92400e",background:"#fffbeb",padding:"7px 9px",borderRadius:7,marginBottom:10}}>
+        🔒 {t("個人情報保護のため、この名簿はこの端末内だけに保存され、共有データには送信されません。","For privacy, this roster is stored only on this device and is not uploaded to shared data.")}
+      </div>
+      {rows.length === 0 && <div style={{fontSize:12,color:"#64748b",padding:"8px 0"}}>{t("「追加」を押して参加者を登録してください。","Select Add to register a participant.")}</div>}
+      {rows.map((row,index) => (
+        <div key={row.id} className="roster-row">
+          <span className="roster-number" style={{fontSize:12,textAlign:"center",color:"#64748b"}}>{index+1}</span>
+          <input className="roster-name" aria-label={t("名前","Name")} value={row.name} onChange={e=>updateRow(row.id,"name",e.target.value)} placeholder={t("名前","Name")} style={inputStyle}/>
+          <input className="roster-age" aria-label={t("年齢・学年","Age / grade")} value={row.age} onChange={e=>updateRow(row.id,"age",e.target.value)} placeholder={t("年齢・学年","Age / grade")} style={inputStyle}/>
+          <select className="roster-gender" aria-label={t("男女","Gender")} value={row.gender} onChange={e=>updateRow(row.id,"gender",e.target.value)} style={inputStyle}>
+            <option value="">{t("男女","Gender")}</option>
+            <option value="male">{t("男子","Male")}</option>
+            <option value="female">{t("女子","Female")}</option>
+            <option value="other">{t("その他・未回答","Other / no answer")}</option>
+          </select>
+          <button className="roster-remove" type="button" aria-label={t("削除","Remove")} onClick={()=>removeRow(row.id)} style={{border:"none",background:"transparent",color:"#b91c1c",fontSize:18}}>×</button>
+        </div>
+      ))}
+      {rows.length > 0 && <div style={{fontSize:11,color:"#64748b",marginTop:6}}>{t(`登録人数：${rows.length}名`,`Registered: ${rows.length}`)}</div>}
+    </div>
+  );
+}
 
 const STATUS_COLORS = {0:"#888", 1:"#e6a817", 2:"#2e8b57"};
 
@@ -359,19 +457,38 @@ function App() {
   const [saveState, setSaveState] = useState("idle");
   const [lastUpdated, setLastUpdated] = useState(null);
   const [showAdmin, setShowAdmin] = useState(false);
+  const [participantRosters, setParticipantRosters] = useState({us:[],jp:[]});
   const skipRef = useRef(false);
+
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(ROSTER_STORAGE_KEY) || "{}");
+      setParticipantRosters({us:Array.isArray(saved.us)?saved.us:[], jp:Array.isArray(saved.jp)?saved.jp:[]});
+    } catch (_) {
+      setParticipantRosters({us:[],jp:[]});
+    }
+  }, []);
+
+  const setParticipantRoster = (side, rows) => {
+    setParticipantRosters(current => {
+      const next = {...current, [side]:rows};
+      localStorage.setItem(ROSTER_STORAGE_KEY, JSON.stringify(next));
+      return next;
+    });
+  };
 
   // Load sections from Firebase (or use defaults)
   useEffect(() => {
     const ref = db.ref(SECTIONS_PATH);
     ref.once("value").then(snap => {
       const val = snap.val();
-      setSections(val && val.length ? val : DEFAULT_SECTIONS);
+      const loadedSections = withParticipantFields(val && val.length ? val : DEFAULT_SECTIONS);
+      setSections(loadedSections);
       if (openSection === null && (val||DEFAULT_SECTIONS).length > 0) {
-        setOpenSection((val||DEFAULT_SECTIONS)[0].id);
+        setOpenSection(loadedSections[0].id);
       }
     }).catch(() => {
-      setSections(DEFAULT_SECTIONS);
+      setSections(withParticipantFields(DEFAULT_SECTIONS));
       setOpenSection(DEFAULT_SECTIONS[0].id);
     });
   }, []);
@@ -405,8 +522,9 @@ function App() {
   };
 
   const handleSaveSections = async (newSections) => {
-    await db.ref(SECTIONS_PATH).set(newSections);
-    setSections(newSections);
+    const upgradedSections = withParticipantFields(newSections);
+    await db.ref(SECTIONS_PATH).set(upgradedSections);
+    setSections(upgradedSections);
     setShowAdmin(false);
   };
 
@@ -589,13 +707,24 @@ function App() {
                             ))}
                           </select>
                         ) : (
-                          <input type={fld.type} value={formData[fld.id]||""} onChange={e=>setValue(fld.id,e.target.value)}
+                          <input type={fld.type} min={fld.type==="number"?0:undefined} value={formData[fld.id]||""} onChange={e=>setValue(fld.id,e.target.value)}
                             placeholder={placeholder}
                             style={ss.input(filled,sec.color)}/>
                         )}
                       </div>
                     );
                   })}
+                  {(sec.id==="participants_us" || sec.id==="participants_jp") && (
+                    <>
+                      <ParticipantCountSummary side={sec.id==="participants_us"?"us":"jp"} formData={formData} lang={lang}/>
+                      <ParticipantRoster
+                        side={sec.id==="participants_us"?"us":"jp"}
+                        lang={lang}
+                        rows={participantRosters[sec.id==="participants_us"?"us":"jp"]}
+                        onChange={rows=>setParticipantRoster(sec.id==="participants_us"?"us":"jp",rows)}
+                      />
+                    </>
+                  )}
                 </div>
               )}
             </div>
